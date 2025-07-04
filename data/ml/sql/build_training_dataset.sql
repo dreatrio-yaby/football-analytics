@@ -2,14 +2,7 @@
 -- Использует window функции ClickHouse для максимальной производительности
 -- Один запрос вместо сложной системы CTE и JOIN
 
--- Создаем схему ml если не существует
-CREATE DATABASE IF NOT EXISTS ml;
-
--- Удаляем старую таблицу если существует
-DROP TABLE IF EXISTS ml.training_dataset;
-
--- Создаем и заполняем таблицу одним запросом
-CREATE TABLE ml.training_dataset 
+CREATE OR REPLACE TABLE ml.training_dataset 
 ENGINE = MergeTree()
 ORDER BY (match_date, match_id)
 PARTITION BY toYYYYMM(match_date)

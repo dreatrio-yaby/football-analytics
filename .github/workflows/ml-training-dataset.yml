@@ -80,6 +80,20 @@ jobs:
           echo "✅ Raw data verification completed"
           rm -f raw_stats.txt
       
+      - name: Create ML database
+        if: github.event.inputs.operation == 'build' || github.event.inputs.operation == ''
+        run: |
+          echo "🏗️  Creating ML database..."
+          
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data "CREATE DATABASE IF NOT EXISTS ml" || {
+            echo "❌ Failed to create ml database"
+            exit 1
+          }
+          echo "✅ ML database created"
+      
       - name: Build training dataset
         if: github.event.inputs.operation == 'build' || github.event.inputs.operation == ''
         run: |
