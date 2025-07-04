@@ -178,6 +178,9 @@ FROM (
         '{ACCESS_KEY_SECRET}',
         'JSONAsString'
     )
+    WHERE JSONExtractString(json, 'match_date') != '' 
+      AND JSONExtractString(json, 'match_date') IS NOT NULL
+      AND isNotNull(JSONExtractString(json, 'match_date'))
     
     UNION ALL
     
@@ -191,4 +194,7 @@ FROM (
         '{ACCESS_KEY_SECRET}',
         'JSONAsString'
     )
+    WHERE JSONExtractString(json, 'match_date') != '' 
+      AND JSONExtractString(json, 'match_date') IS NOT NULL
+      AND isNotNull(JSONExtractString(json, 'match_date'))
 );
