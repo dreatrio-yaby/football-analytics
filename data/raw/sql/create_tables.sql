@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS raw.match_stats (
     match_id String,
     match_date Date,
     team_id String,
+    is_home UInt8,
     
     -- Summary статистика
     summary_minutes String,

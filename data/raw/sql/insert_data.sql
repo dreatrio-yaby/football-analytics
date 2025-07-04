@@ -7,6 +7,7 @@ SELECT
     JSONExtractString(json, 'match_id') as match_id,
     toDate(JSONExtractString(json, 'match_date')) as match_date,
     team_id,
+    is_home,
     
     -- Summary статистика
     JSONExtractString(json, 'teams_stats', team_id, 'summary', 'minutes') as summary_minutes,
@@ -169,7 +170,21 @@ SELECT
 FROM (
     SELECT 
         json,
-        arrayJoin(JSONExtractKeysAndValues(json, 'teams_stats')).1 AS team_id
+        arrayJoin(JSONExtractKeys(json, 'teams_stats'))[1] AS team_id,
+        1 as is_home
+    FROM s3(
+        'https://storage.yandexcloud.net/fbref-json/*.json',
+        '{ACCESS_KEY_ID}', 
+        '{ACCESS_KEY_SECRET}',
+        'JSONAsString'
+    )
+    
+    UNION ALL
+    
+    SELECT 
+        json,
+        arrayJoin(JSONExtractKeys(json, 'teams_stats'))[2] AS team_id,
+        0 as is_home
     FROM s3(
         'https://storage.yandexcloud.net/fbref-json/*.json',
         '{ACCESS_KEY_ID}', 
