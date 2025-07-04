@@ -170,7 +170,7 @@ SELECT
 FROM (
     SELECT 
         json,
-        arrayJoin(JSONExtractKeys(json, 'teams_stats'))[1] AS team_id,
+        JSONExtractKeys(json, 'teams_stats')[1] AS team_id,
         1 as is_home
     FROM s3(
         'https://storage.yandexcloud.net/fbref-json/*.json',
@@ -183,7 +183,7 @@ FROM (
     
     SELECT 
         json,
-        arrayJoin(JSONExtractKeys(json, 'teams_stats'))[2] AS team_id,
+        JSONExtractKeys(json, 'teams_stats')[2] AS team_id,
         0 as is_home
     FROM s3(
         'https://storage.yandexcloud.net/fbref-json/*.json',
