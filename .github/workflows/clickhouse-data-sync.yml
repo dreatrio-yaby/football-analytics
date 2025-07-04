@@ -31,6 +31,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
+      - name: Install Yandex Cloud SSL certificates
+        run: |
+          echo "Installing Yandex Cloud SSL certificates..."
+          sudo mkdir -p /usr/local/share/ca-certificates/Yandex
+          sudo wget "https://storage.yandexcloud.net/cloud-certs/RootCA.pem" \
+            -O /usr/local/share/ca-certificates/Yandex/RootCA.crt
+          sudo wget "https://storage.yandexcloud.net/cloud-certs/IntermediateCA.pem" \
+            -O /usr/local/share/ca-certificates/Yandex/IntermediateCA.crt
+          sudo chmod 644 /usr/local/share/ca-certificates/Yandex/RootCA.crt
+          sudo chmod 644 /usr/local/share/ca-certificates/Yandex/IntermediateCA.crt
+          sudo update-ca-certificates
+          echo "✅ SSL certificates installed successfully"
+      
       - name: Test ClickHouse connection
         run: |
           echo "Testing ClickHouse connection..."
