@@ -147,6 +147,33 @@ jobs:
           
           rm -f create_table_result.txt
       
+      - name: Test team features syntax
+        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
+        run: |
+          echo "🔍 Testing team features SQL syntax..."
+          
+          # Сначала тестируем синтаксис на небольшом подзапросе
+          response=$(curl -s -w "%{http_code}" \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @data/ml/sql/test_generate_features.sql \
+            --output test_features_result.txt)
+          
+          echo "Test HTTP Status: $response"
+          echo "Test Response:"
+          head -10 test_features_result.txt
+          
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Team features syntax test passed"
+          else
+            echo "❌ Team features syntax test failed"
+            cat test_features_result.txt
+            rm -f test_features_result.txt
+            exit 1
+          fi
+          
+          rm -f test_features_result.txt
+      
       - name: Generate team features
         if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
         run: |

@@ -36,10 +36,18 @@ WITH match_results AS (
 -- Добавляем пропущенные голы для каждой команды
 match_results_with_conceded AS (
     SELECT 
-        m1.*,
-        m2.goals_scored as goals_conceded
+        *,
+        (SELECT goals_scored 
+         FROM match_results m2 
+         WHERE m2.match_id = m1.match_id AND m2.team_id != m1.team_id
+         LIMIT 1
+        ) as goals_conceded,
+        (SELECT xg 
+         FROM match_results m2 
+         WHERE m2.match_id = m1.match_id AND m2.team_id != m1.team_id
+         LIMIT 1
+        ) as xg_conceded
     FROM match_results m1
-    LEFT JOIN match_results m2 ON m1.match_id = m2.match_id AND m1.team_id != m2.team_id
 ),
 
 -- Добавляем результат матча для каждой команды
@@ -506,19 +514,19 @@ team_features AS (
         ) as goals_std_11,
         
         -- Добавляем XG против (для расчета эффективности защиты)
-        AVG(xg) OVER (
+        AVG(xg_conceded) OVER (
             PARTITION BY team_id 
             ORDER BY match_date 
             ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
         ) as xg_conceded_avg_3,
         
-        AVG(xg) OVER (
+        AVG(xg_conceded) OVER (
             PARTITION BY team_id 
             ORDER BY match_date 
             ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
         ) as xg_conceded_avg_7,
         
-        AVG(xg) OVER (
+        AVG(xg_conceded) OVER (
             PARTITION BY team_id 
             ORDER BY match_date 
             ROWS BETWEEN 11 PRECEDING AND 1 PRECEDING
