@@ -2,34 +2,51 @@
 
 ## Проблема и решение
 
-### Исходная проблема
-ClickHouse 25.3.3 не поддерживает `!=` в JOIN ON условиях:
+### Исходные проблемы
+1. ClickHouse 25.3.3 не поддерживает `!=` в LEFT JOIN ON условиях
+2. Подзапросы не имеют доступа к внешним алиасам (`m1.team_id`)
+
+**Ошибка 1:**
 ```sql
 LEFT JOIN match_results m2 ON m1.match_id = m2.match_id AND m1.team_id != m2.team_id
 ```
 
-### Решение
-Заменили JOIN с `!=` на подзапросы:
+**Ошибка 2:**
 ```sql
 (SELECT goals_scored 
  FROM match_results m2 
- WHERE m2.match_id = m1.match_id AND m2.team_id != m1.team_id
+ WHERE m2.match_id = m1.match_id AND m2.team_id != m1.team_id  -- ошибка: m1 недоступен
  LIMIT 1
 ) as goals_conceded
+```
+
+### Решение
+Заменили на простой INNER JOIN с `!=` (который ClickHouse поддерживает):
+```sql
+FROM match_results m1
+INNER JOIN match_results m2 ON (
+    m1.match_id = m2.match_id 
+    AND m1.team_id != m2.team_id
+)
 ```
 
 ## Внесенные изменения
 
 ### 1. Файл `generate_team_features.sql`
-- ✅ Заменен JOIN с `!=` на подзапрос для получения `goals_conceded`
-- ✅ Добавлен подзапрос для получения `xg_conceded` 
+- ✅ Заменен LEFT JOIN на INNER JOIN с `!=` для получения данных противника
+- ✅ Явно перечислены все поля вместо `SELECT *` для избежания конфликтов
+- ✅ Добавлено получение `xg_conceded` от противника
 - ✅ Исправлен расчет `xg_conceded_avg_*` для использования правильного поля
 
 ### 2. Файл `ml-training-dataset.yml`
 - ✅ Добавлен шаг тестирования синтаксиса SQL перед выполнением
 - ✅ Создан тестовый файл `test_generate_features.sql`
 
-### 3. Новые файлы
+### 3. Файл `test_generate_features.sql`
+- ✅ Обновлен для использования INNER JOIN вместо подзапросов
+- ✅ Упрощен для тестирования основной логики
+
+### 4. Новые файлы
 - `test_generate_features.sql` - тестовый запрос для проверки синтаксиса
 - `TESTING.md` - данная инструкция
 

@@ -36,18 +36,35 @@ WITH match_results AS (
 -- Добавляем пропущенные голы для каждой команды
 match_results_with_conceded AS (
     SELECT 
-        *,
-        (SELECT goals_scored 
-         FROM match_results m2 
-         WHERE m2.match_id = m1.match_id AND m2.team_id != m1.team_id
-         LIMIT 1
-        ) as goals_conceded,
-        (SELECT xg 
-         FROM match_results m2 
-         WHERE m2.match_id = m1.match_id AND m2.team_id != m1.team_id
-         LIMIT 1
-        ) as xg_conceded
+        m1.match_id,
+        m1.match_date,
+        m1.team_id,
+        m1.is_home,
+        m1.goals_scored,
+        m1.shots,
+        m1.shots_on_target,
+        m1.xg,
+        m1.passes_completed,
+        m1.passes,
+        m1.progressive_passes,
+        m1.tackles,
+        m1.interceptions,
+        m1.fouls,
+        m1.cards_yellow,
+        m1.cards_red,
+        m1.corners,
+        m1.crosses,
+        m1.take_ons_won,
+        m1.take_ons,
+        m1.aerials_won,
+        m1.aerials_lost,
+        m2.goals_scored as goals_conceded,
+        m2.xg as xg_conceded
     FROM match_results m1
+    INNER JOIN match_results m2 ON (
+        m1.match_id = m2.match_id 
+        AND m1.team_id != m2.team_id
+    )
 ),
 
 -- Добавляем результат матча для каждой команды
