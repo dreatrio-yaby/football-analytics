@@ -1,459 +1,256 @@
--- Основной ETL-скрипт для создания обучающей выборки
--- Объединяет признаки команд и таргеты в финальную таблицу
+-- Простое и эффективное создание обучающей выборки для футбольной аналитики
+-- Использует window функции ClickHouse для максимальной производительности
+-- Один запрос вместо сложной системы CTE и JOIN
 
--- Шаг 1: Создание схемы ml если не существует
+-- Создаем схему ml если не существует
 CREATE DATABASE IF NOT EXISTS ml;
 
--- Шаг 2: Создание таблицы обучающей выборки
-CREATE TABLE IF NOT EXISTS ml.training_dataset (
-    -- Технические поля (не используются как признаки)
-    match_id String,
-    match_date Date,
-    home_team_id String,
-    away_team_id String,
-    
-    -- ТАРГЕТЫ --
-    target_match_result UInt8,
-    target_total_goals_over_0_5 UInt8,
-    target_total_goals_over_1_5 UInt8,
-    target_total_goals_over_2_5 UInt8,
-    target_total_goals_over_3_5 UInt8,
-    target_total_goals_over_4_5 UInt8,
-    target_total_goals_over_5_5 UInt8,
-    target_home_goals_over_0_5 UInt8,
-    target_home_goals_over_1_5 UInt8,
-    target_home_goals_over_2_5 UInt8,
-    target_home_goals_over_3_5 UInt8,
-    target_away_goals_over_0_5 UInt8,
-    target_away_goals_over_1_5 UInt8,
-    target_away_goals_over_2_5 UInt8,
-    target_away_goals_over_3_5 UInt8,
-    target_corners_over_8_5 UInt8,
-    target_corners_over_9_5 UInt8,
-    target_corners_over_10_5 UInt8,
-    target_corners_over_11_5 UInt8,
-    target_corners_over_12_5 UInt8,
-    target_cards_over_2_5 UInt8,
-    target_cards_over_3_5 UInt8,
-    target_cards_over_4_5 UInt8,
-    target_cards_over_5_5 UInt8,
-    target_fouls_over_18_5 UInt8,
-    target_fouls_over_20_5 UInt8,
-    target_fouls_over_22_5 UInt8,
-    target_fouls_over_24_5 UInt8,
-    
-    -- ПРИЗНАКИ ДОМАШНЕЙ КОМАНДЫ --
-    home_team_goals_avg_3 Float32,
-    home_team_goals_sum_3 Float32,
-    home_team_goals_conceded_avg_3 Float32,
-    home_team_goals_conceded_sum_3 Float32,
-    home_team_shots_avg_3 Float32,
-    home_team_shots_on_target_avg_3 Float32,
-    home_team_shots_on_target_pct_3 Float32,
-    home_team_xg_avg_3 Float32,
-    home_team_xg_sum_3 Float32,
-    home_team_xg_conceded_avg_3 Float32,
-    home_team_passes_completed_avg_3 Float32,
-    home_team_passes_pct_3 Float32,
-    home_team_progressive_passes_avg_3 Float32,
-    home_team_possession_avg_3 Float32,
-    home_team_tackles_avg_3 Float32,
-    home_team_interceptions_avg_3 Float32,
-    home_team_fouls_avg_3 Float32,
-    home_team_cards_yellow_avg_3 Float32,
-    home_team_cards_red_avg_3 Float32,
-    home_team_corners_avg_3 Float32,
-    home_team_crosses_avg_3 Float32,
-    home_team_take_ons_won_pct_3 Float32,
-    home_team_aerials_won_pct_3 Float32,
-    home_team_form_3 Float32,
-    home_team_goals_avg_7 Float32,
-    home_team_goals_sum_7 Float32,
-    home_team_goals_conceded_avg_7 Float32,
-    home_team_goals_conceded_sum_7 Float32,
-    home_team_shots_avg_7 Float32,
-    home_team_shots_on_target_avg_7 Float32,
-    home_team_shots_on_target_pct_7 Float32,
-    home_team_xg_avg_7 Float32,
-    home_team_xg_sum_7 Float32,
-    home_team_xg_conceded_avg_7 Float32,
-    home_team_passes_completed_avg_7 Float32,
-    home_team_passes_pct_7 Float32,
-    home_team_progressive_passes_avg_7 Float32,
-    home_team_possession_avg_7 Float32,
-    home_team_tackles_avg_7 Float32,
-    home_team_interceptions_avg_7 Float32,
-    home_team_fouls_avg_7 Float32,
-    home_team_cards_yellow_avg_7 Float32,
-    home_team_cards_red_avg_7 Float32,
-    home_team_corners_avg_7 Float32,
-    home_team_crosses_avg_7 Float32,
-    home_team_take_ons_won_pct_7 Float32,
-    home_team_aerials_won_pct_7 Float32,
-    home_team_form_7 Float32,
-    home_team_goals_avg_11 Float32,
-    home_team_goals_sum_11 Float32,
-    home_team_goals_conceded_avg_11 Float32,
-    home_team_goals_conceded_sum_11 Float32,
-    home_team_shots_avg_11 Float32,
-    home_team_shots_on_target_avg_11 Float32,
-    home_team_shots_on_target_pct_11 Float32,
-    home_team_xg_avg_11 Float32,
-    home_team_xg_sum_11 Float32,
-    home_team_xg_conceded_avg_11 Float32,
-    home_team_passes_completed_avg_11 Float32,
-    home_team_passes_pct_11 Float32,
-    home_team_progressive_passes_avg_11 Float32,
-    home_team_possession_avg_11 Float32,
-    home_team_tackles_avg_11 Float32,
-    home_team_interceptions_avg_11 Float32,
-    home_team_fouls_avg_11 Float32,
-    home_team_cards_yellow_avg_11 Float32,
-    home_team_cards_red_avg_11 Float32,
-    home_team_corners_avg_11 Float32,
-    home_team_crosses_avg_11 Float32,
-    home_team_take_ons_won_pct_11 Float32,
-    home_team_aerials_won_pct_11 Float32,
-    home_team_form_11 Float32,
-    
-    -- ПРИЗНАКИ ГОСТЕВОЙ КОМАНДЫ --
-    away_team_goals_avg_3 Float32,
-    away_team_goals_sum_3 Float32,
-    away_team_goals_conceded_avg_3 Float32,
-    away_team_goals_conceded_sum_3 Float32,
-    away_team_shots_avg_3 Float32,
-    away_team_shots_on_target_avg_3 Float32,
-    away_team_shots_on_target_pct_3 Float32,
-    away_team_xg_avg_3 Float32,
-    away_team_xg_sum_3 Float32,
-    away_team_xg_conceded_avg_3 Float32,
-    away_team_passes_completed_avg_3 Float32,
-    away_team_passes_pct_3 Float32,
-    away_team_progressive_passes_avg_3 Float32,
-    away_team_possession_avg_3 Float32,
-    away_team_tackles_avg_3 Float32,
-    away_team_interceptions_avg_3 Float32,
-    away_team_fouls_avg_3 Float32,
-    away_team_cards_yellow_avg_3 Float32,
-    away_team_cards_red_avg_3 Float32,
-    away_team_corners_avg_3 Float32,
-    away_team_crosses_avg_3 Float32,
-    away_team_take_ons_won_pct_3 Float32,
-    away_team_aerials_won_pct_3 Float32,
-    away_team_form_3 Float32,
-    away_team_goals_avg_7 Float32,
-    away_team_goals_sum_7 Float32,
-    away_team_goals_conceded_avg_7 Float32,
-    away_team_goals_conceded_sum_7 Float32,
-    away_team_shots_avg_7 Float32,
-    away_team_shots_on_target_avg_7 Float32,
-    away_team_shots_on_target_pct_7 Float32,
-    away_team_xg_avg_7 Float32,
-    away_team_xg_sum_7 Float32,
-    away_team_xg_conceded_avg_7 Float32,
-    away_team_passes_completed_avg_7 Float32,
-    away_team_passes_pct_7 Float32,
-    away_team_progressive_passes_avg_7 Float32,
-    away_team_possession_avg_7 Float32,
-    away_team_tackles_avg_7 Float32,
-    away_team_interceptions_avg_7 Float32,
-    away_team_fouls_avg_7 Float32,
-    away_team_cards_yellow_avg_7 Float32,
-    away_team_cards_red_avg_7 Float32,
-    away_team_corners_avg_7 Float32,
-    away_team_crosses_avg_7 Float32,
-    away_team_take_ons_won_pct_7 Float32,
-    away_team_aerials_won_pct_7 Float32,
-    away_team_form_7 Float32,
-    away_team_goals_avg_11 Float32,
-    away_team_goals_sum_11 Float32,
-    away_team_goals_conceded_avg_11 Float32,
-    away_team_goals_conceded_sum_11 Float32,
-    away_team_shots_avg_11 Float32,
-    away_team_shots_on_target_avg_11 Float32,
-    away_team_shots_on_target_pct_11 Float32,
-    away_team_xg_avg_11 Float32,
-    away_team_xg_sum_11 Float32,
-    away_team_xg_conceded_avg_11 Float32,
-    away_team_passes_completed_avg_11 Float32,
-    away_team_passes_pct_11 Float32,
-    away_team_progressive_passes_avg_11 Float32,
-    away_team_possession_avg_11 Float32,
-    away_team_tackles_avg_11 Float32,
-    away_team_interceptions_avg_11 Float32,
-    away_team_fouls_avg_11 Float32,
-    away_team_cards_yellow_avg_11 Float32,
-    away_team_cards_red_avg_11 Float32,
-    away_team_corners_avg_11 Float32,
-    away_team_crosses_avg_11 Float32,
-    away_team_take_ons_won_pct_11 Float32,
-    away_team_aerials_won_pct_11 Float32,
-    away_team_form_11 Float32,
-    
-    -- ПРИЗНАКИ ВЗАИМОДЕЙСТВИЯ КОМАНД --
-    diff_goals_avg_3 Float32,
-    diff_goals_conceded_avg_3 Float32,
-    diff_xg_avg_3 Float32,
-    diff_shots_avg_3 Float32,
-    diff_possession_avg_3 Float32,
-    diff_form_3 Float32,
-    ratio_goals_avg_3 Float32,
-    ratio_xg_avg_3 Float32,
-    ratio_shots_avg_3 Float32,
-    diff_goals_avg_7 Float32,
-    diff_goals_conceded_avg_7 Float32,
-    diff_xg_avg_7 Float32,
-    diff_shots_avg_7 Float32,
-    diff_possession_avg_7 Float32,
-    diff_form_7 Float32,
-    ratio_goals_avg_7 Float32,
-    ratio_xg_avg_7 Float32,
-    ratio_shots_avg_7 Float32,
-    diff_goals_avg_11 Float32,
-    diff_goals_conceded_avg_11 Float32,
-    diff_xg_avg_11 Float32,
-    diff_shots_avg_11 Float32,
-    diff_possession_avg_11 Float32,
-    diff_form_11 Float32,
-    ratio_goals_avg_11 Float32,
-    ratio_xg_avg_11 Float32,
-    ratio_shots_avg_11 Float32,
-    
-    -- ПРОИЗВОДНЫЕ ПРИЗНАКИ --
-    home_team_attack_efficiency_3 Float32,
-    home_team_attack_efficiency_7 Float32,
-    home_team_attack_efficiency_11 Float32,
-    home_team_defense_efficiency_3 Float32,
-    home_team_defense_efficiency_7 Float32,
-    home_team_defense_efficiency_11 Float32,
-    away_team_attack_efficiency_3 Float32,
-    away_team_attack_efficiency_7 Float32,
-    away_team_attack_efficiency_11 Float32,
-    away_team_defense_efficiency_3 Float32,
-    away_team_defense_efficiency_7 Float32,
-    away_team_defense_efficiency_11 Float32,
-    home_team_goals_std_3 Float32,
-    home_team_goals_std_7 Float32,
-    home_team_goals_std_11 Float32,
-    away_team_goals_std_3 Float32,
-    away_team_goals_std_7 Float32,
-    away_team_goals_std_11 Float32
-)
+-- Удаляем старую таблицу если существует
+DROP TABLE IF EXISTS ml.training_dataset;
+
+-- Создаем и заполняем таблицу одним запросом
+CREATE TABLE ml.training_dataset 
 ENGINE = MergeTree()
 ORDER BY (match_date, match_id)
-PARTITION BY toYYYYMM(match_date);
+PARTITION BY toYYYYMM(match_date)
+AS
 
--- Шаг 3: Заполнение таблицы данными
-INSERT INTO ml.training_dataset
 WITH 
--- Получение признаков домашних команд
-home_features AS (
+-- 1. Базовые данные матчей
+match_data AS (
     SELECT 
         match_id,
         match_date,
         team_id,
-        goals_avg_3, goals_sum_3, goals_conceded_avg_3, goals_conceded_sum_3,
-        shots_avg_3, shots_on_target_avg_3, shots_on_target_pct_3,
-        xg_avg_3, xg_sum_3, xg_conceded_avg_3,
-        passes_completed_avg_3, passes_pct_3, progressive_passes_avg_3,
-        possession_avg_3, tackles_avg_3, interceptions_avg_3,
-        fouls_avg_3, cards_yellow_avg_3, cards_red_avg_3,
-        corners_avg_3, crosses_avg_3, take_ons_won_pct_3,
-        aerials_won_pct_3, form_3, goals_std_3,
-        goals_avg_7, goals_sum_7, goals_conceded_avg_7, goals_conceded_sum_7,
-        shots_avg_7, shots_on_target_avg_7, shots_on_target_pct_7,
-        xg_avg_7, xg_sum_7, xg_conceded_avg_7,
-        passes_completed_avg_7, passes_pct_7, progressive_passes_avg_7,
-        possession_avg_7, tackles_avg_7, interceptions_avg_7,
-        fouls_avg_7, cards_yellow_avg_7, cards_red_avg_7,
-        corners_avg_7, crosses_avg_7, take_ons_won_pct_7,
-        aerials_won_pct_7, form_7, goals_std_7,
-        goals_avg_11, goals_sum_11, goals_conceded_avg_11, goals_conceded_sum_11,
-        shots_avg_11, shots_on_target_avg_11, shots_on_target_pct_11,
-        xg_avg_11, xg_sum_11, xg_conceded_avg_11,
-        passes_completed_avg_11, passes_pct_11, progressive_passes_avg_11,
-        possession_avg_11, tackles_avg_11, interceptions_avg_11,
-        fouls_avg_11, cards_yellow_avg_11, cards_red_avg_11,
-        corners_avg_11, crosses_avg_11, take_ons_won_pct_11,
-        aerials_won_pct_11, form_11, goals_std_11
-    FROM file('generate_team_features.sql', 'Format', 'CSV')
-    WHERE is_home = 1
+        is_home,
+        -- Основные метрики
+        toFloat32OrZero(summary_goals) as goals,
+        toFloat32OrZero(summary_shots) as shots,
+        toFloat32OrZero(summary_shots_on_target) as shots_on_target,
+        toFloat32OrZero(summary_xg) as xg,
+        toFloat32OrZero(summary_passes_completed) as passes_completed,
+        toFloat32OrZero(summary_passes) as passes,
+        toFloat32OrZero(summary_progressive_passes) as progressive_passes,
+        toFloat32OrZero(summary_tackles) as tackles,
+        toFloat32OrZero(summary_interceptions) as interceptions,
+        toFloat32OrZero(miscellaneous_fouls) as fouls,
+        toFloat32OrZero(summary_cards_yellow) as cards_yellow,
+        toFloat32OrZero(summary_cards_red) as cards_red,
+        toFloat32OrZero(pass_types_corner_kicks) as corners,
+        toFloat32OrZero(miscellaneous_crosses) as crosses,
+        toFloat32OrZero(possession_take_ons_won) as take_ons_won,
+        toFloat32OrZero(possession_take_ons) as take_ons,
+        toFloat32OrZero(miscellaneous_aerials_won) as aerials_won,
+        toFloat32OrZero(miscellaneous_aerials_lost) as aerials_lost
+    FROM raw.match_stats
 ),
 
--- Получение признаков гостевых команд
-away_features AS (
-    SELECT 
-        match_id,
-        match_date,
-        team_id,
-        goals_avg_3, goals_sum_3, goals_conceded_avg_3, goals_conceded_sum_3,
-        shots_avg_3, shots_on_target_avg_3, shots_on_target_pct_3,
-        xg_avg_3, xg_sum_3, xg_conceded_avg_3,
-        passes_completed_avg_3, passes_pct_3, progressive_passes_avg_3,
-        possession_avg_3, tackles_avg_3, interceptions_avg_3,
-        fouls_avg_3, cards_yellow_avg_3, cards_red_avg_3,
-        corners_avg_3, crosses_avg_3, take_ons_won_pct_3,
-        aerials_won_pct_3, form_3, goals_std_3,
-        goals_avg_7, goals_sum_7, goals_conceded_avg_7, goals_conceded_sum_7,
-        shots_avg_7, shots_on_target_avg_7, shots_on_target_pct_7,
-        xg_avg_7, xg_sum_7, xg_conceded_avg_7,
-        passes_completed_avg_7, passes_pct_7, progressive_passes_avg_7,
-        possession_avg_7, tackles_avg_7, interceptions_avg_7,
-        fouls_avg_7, cards_yellow_avg_7, cards_red_avg_7,
-        corners_avg_7, crosses_avg_7, take_ons_won_pct_7,
-        aerials_won_pct_7, form_7, goals_std_7,
-        goals_avg_11, goals_sum_11, goals_conceded_avg_11, goals_conceded_sum_11,
-        shots_avg_11, shots_on_target_avg_11, shots_on_target_pct_11,
-        xg_avg_11, xg_sum_11, xg_conceded_avg_11,
-        passes_completed_avg_11, passes_pct_11, progressive_passes_avg_11,
-        possession_avg_11, tackles_avg_11, interceptions_avg_11,
-        fouls_avg_11, cards_yellow_avg_11, cards_red_avg_11,
-        corners_avg_11, crosses_avg_11, take_ons_won_pct_11,
-        aerials_won_pct_11, form_11, goals_std_11
-    FROM file('generate_team_features.sql', 'Format', 'CSV')
-    WHERE is_home = 0
+-- 2. Добавляем признаки через window функции (сила ClickHouse!)
+team_features AS (
+    SELECT *,
+        -- Процентные показатели
+        CASE WHEN shots > 0 THEN shots_on_target / shots * 100 ELSE 0 END as shots_on_target_pct,
+        CASE WHEN passes > 0 THEN passes_completed / passes * 100 ELSE 0 END as passes_pct,
+        CASE WHEN take_ons > 0 THEN take_ons_won / take_ons * 100 ELSE 0 END as take_ons_won_pct,
+        CASE WHEN (aerials_won + aerials_lost) > 0 THEN aerials_won / (aerials_won + aerials_lost) * 100 ELSE 0 END as aerials_won_pct,
+        
+        -- Результат матча будет вычислен позже в final_dataset
+        0 as match_result,
+        
+        -- Признаки за 3 матча (window функции исключают текущий матч)
+        AVG(goals) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as goals_avg_3,
+        
+        AVG(xg) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as xg_avg_3,
+        
+        AVG(shots) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as shots_avg_3,
+        
+        AVG(shots_on_target_pct) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as shots_on_target_pct_3,
+        
+        AVG(passes_pct) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as passes_pct_3,
+        
+        AVG(corners) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as corners_avg_3,
+        
+        AVG(fouls) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as fouls_avg_3,
+        
+        AVG(cards_yellow + cards_red) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 3 PRECEDING AND 1 PRECEDING
+        ) as cards_avg_3,
+        
+        -- Форма команды вычислим позже
+        0 as form_3,
+        
+        -- Признаки за 7 матчей
+        AVG(goals) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as goals_avg_7,
+        
+        AVG(xg) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as xg_avg_7,
+        
+        AVG(shots) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as shots_avg_7,
+        
+        AVG(shots_on_target_pct) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as shots_on_target_pct_7,
+        
+        AVG(passes_pct) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as passes_pct_7,
+        
+        AVG(corners) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as corners_avg_7,
+        
+        AVG(fouls) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as fouls_avg_7,
+        
+        AVG(cards_yellow + cards_red) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as cards_avg_7,
+        
+        -- Форма команды вычислим позже
+        0 as form_7,
+        
+        -- Стабильность (стандартное отклонение)
+        stddevPop(goals) OVER (
+            PARTITION BY team_id ORDER BY match_date 
+            ROWS BETWEEN 7 PRECEDING AND 1 PRECEDING
+        ) as goals_std_7
+        
+    FROM match_data
 ),
 
--- Получение таргетов
-targets AS (
+-- 3. Финальный датасет: объединяем домашние и гостевые команды
+final_dataset AS (
     SELECT 
-        match_id,
-        match_date,
-        home_team_id,
-        away_team_id,
-        target_match_result,
-        target_total_goals_over_0_5, target_total_goals_over_1_5, target_total_goals_over_2_5,
-        target_total_goals_over_3_5, target_total_goals_over_4_5, target_total_goals_over_5_5,
-        target_home_goals_over_0_5, target_home_goals_over_1_5, target_home_goals_over_2_5, target_home_goals_over_3_5,
-        target_away_goals_over_0_5, target_away_goals_over_1_5, target_away_goals_over_2_5, target_away_goals_over_3_5,
-        target_corners_over_8_5, target_corners_over_9_5, target_corners_over_10_5, target_corners_over_11_5, target_corners_over_12_5,
-        target_cards_over_2_5, target_cards_over_3_5, target_cards_over_4_5, target_cards_over_5_5,
-        target_fouls_over_18_5, target_fouls_over_20_5, target_fouls_over_22_5, target_fouls_over_24_5
-    FROM file('generate_targets.sql', 'Format', 'CSV')
+        h.match_id,
+        h.match_date,
+        h.team_id as home_team_id,
+        a.team_id as away_team_id,
+        
+        -- ТАРГЕТЫ (вычисляем прямо здесь)
+        CASE 
+            WHEN h.goals > a.goals THEN 2  -- победа домашней команды
+            WHEN h.goals = a.goals THEN 1  -- ничья
+            ELSE 0                         -- поражение домашней команды
+        END as target_match_result,
+        
+        -- Тоталы голов
+        CASE WHEN (h.goals + a.goals) > 0.5 THEN 1 ELSE 0 END as target_total_goals_over_0_5,
+        CASE WHEN (h.goals + a.goals) > 1.5 THEN 1 ELSE 0 END as target_total_goals_over_1_5,
+        CASE WHEN (h.goals + a.goals) > 2.5 THEN 1 ELSE 0 END as target_total_goals_over_2_5,
+        CASE WHEN (h.goals + a.goals) > 3.5 THEN 1 ELSE 0 END as target_total_goals_over_3_5,
+        
+        -- Индивидуальные тоталы
+        CASE WHEN h.goals > 0.5 THEN 1 ELSE 0 END as target_home_goals_over_0_5,
+        CASE WHEN h.goals > 1.5 THEN 1 ELSE 0 END as target_home_goals_over_1_5,
+        CASE WHEN a.goals > 0.5 THEN 1 ELSE 0 END as target_away_goals_over_0_5,
+        CASE WHEN a.goals > 1.5 THEN 1 ELSE 0 END as target_away_goals_over_1_5,
+        
+        -- Угловые и карточки
+        CASE WHEN (h.corners + a.corners) > 9.5 THEN 1 ELSE 0 END as target_corners_over_9_5,
+        CASE WHEN (h.cards_yellow + h.cards_red + a.cards_yellow + a.cards_red) > 3.5 THEN 1 ELSE 0 END as target_cards_over_3_5,
+        CASE WHEN (h.fouls + a.fouls) > 20.5 THEN 1 ELSE 0 END as target_fouls_over_20_5,
+        
+        -- ПРИЗНАКИ ДОМАШНЕЙ КОМАНДЫ
+        h.goals_avg_3 as home_goals_avg_3,
+        h.goals_avg_7 as home_goals_avg_7,
+        h.xg_avg_3 as home_xg_avg_3,
+        h.xg_avg_7 as home_xg_avg_7,
+        h.shots_avg_3 as home_shots_avg_3,
+        h.shots_avg_7 as home_shots_avg_7,
+        h.shots_on_target_pct_3 as home_shots_on_target_pct_3,
+        h.shots_on_target_pct_7 as home_shots_on_target_pct_7,
+        h.passes_pct_3 as home_passes_pct_3,
+        h.passes_pct_7 as home_passes_pct_7,
+        h.corners_avg_3 as home_corners_avg_3,
+        h.corners_avg_7 as home_corners_avg_7,
+        h.fouls_avg_3 as home_fouls_avg_3,
+        h.fouls_avg_7 as home_fouls_avg_7,
+        h.cards_avg_3 as home_cards_avg_3,
+        h.cards_avg_7 as home_cards_avg_7,
+        -- Форма команд пока не используется
+        0 as home_form_3,
+        0 as home_form_7,
+        h.goals_std_7 as home_goals_std_7,
+        
+        -- ПРИЗНАКИ ГОСТЕВОЙ КОМАНДЫ
+        a.goals_avg_3 as away_goals_avg_3,
+        a.goals_avg_7 as away_goals_avg_7,
+        a.xg_avg_3 as away_xg_avg_3,
+        a.xg_avg_7 as away_xg_avg_7,
+        a.shots_avg_3 as away_shots_avg_3,
+        a.shots_avg_7 as away_shots_avg_7,
+        a.shots_on_target_pct_3 as away_shots_on_target_pct_3,
+        a.shots_on_target_pct_7 as away_shots_on_target_pct_7,
+        a.passes_pct_3 as away_passes_pct_3,
+        a.passes_pct_7 as away_passes_pct_7,
+        a.corners_avg_3 as away_corners_avg_3,
+        a.corners_avg_7 as away_corners_avg_7,
+        a.fouls_avg_3 as away_fouls_avg_3,
+        a.fouls_avg_7 as away_fouls_avg_7,
+        a.cards_avg_3 as away_cards_avg_3,
+        a.cards_avg_7 as away_cards_avg_7,
+        -- Форма команд пока не используется  
+        0 as away_form_3,
+        0 as away_form_7,
+        a.goals_std_7 as away_goals_std_7,
+        
+        -- СРАВНИТЕЛЬНЫЕ ПРИЗНАКИ (разности и отношения)
+        h.goals_avg_7 - a.goals_avg_7 as diff_goals_avg_7,
+        h.xg_avg_7 - a.xg_avg_7 as diff_xg_avg_7,
+        -- Разность форм пока не используется
+        0 as diff_form_7,
+        
+        CASE WHEN a.goals_avg_7 > 0 THEN h.goals_avg_7 / a.goals_avg_7 ELSE 0 END as ratio_goals_avg_7,
+        CASE WHEN a.xg_avg_7 > 0 THEN h.xg_avg_7 / a.xg_avg_7 ELSE 0 END as ratio_xg_avg_7,
+        
+        -- ПРОИЗВОДНЫЕ ПРИЗНАКИ
+        CASE WHEN h.shots_avg_7 > 0 THEN h.goals_avg_7 / h.shots_avg_7 ELSE 0 END as home_attack_efficiency_7,
+        CASE WHEN a.shots_avg_7 > 0 THEN a.goals_avg_7 / a.shots_avg_7 ELSE 0 END as away_attack_efficiency_7
+        
+    FROM team_features h
+    INNER JOIN team_features a ON h.match_id = a.match_id
+    WHERE h.is_home = 1 AND a.is_home = 0  -- Простой JOIN по домашней/гостевой команде
 )
 
-SELECT 
-    t.match_id,
-    t.match_date,
-    t.home_team_id,
-    t.away_team_id,
-    
-    -- Таргеты
-    t.target_match_result,
-    t.target_total_goals_over_0_5, t.target_total_goals_over_1_5, t.target_total_goals_over_2_5,
-    t.target_total_goals_over_3_5, t.target_total_goals_over_4_5, t.target_total_goals_over_5_5,
-    t.target_home_goals_over_0_5, t.target_home_goals_over_1_5, t.target_home_goals_over_2_5, t.target_home_goals_over_3_5,
-    t.target_away_goals_over_0_5, t.target_away_goals_over_1_5, t.target_away_goals_over_2_5, t.target_away_goals_over_3_5,
-    t.target_corners_over_8_5, t.target_corners_over_9_5, t.target_corners_over_10_5, t.target_corners_over_11_5, t.target_corners_over_12_5,
-    t.target_cards_over_2_5, t.target_cards_over_3_5, t.target_cards_over_4_5, t.target_cards_over_5_5,
-    t.target_fouls_over_18_5, t.target_fouls_over_20_5, t.target_fouls_over_22_5, t.target_fouls_over_24_5,
-    
-    -- Признаки домашней команды
-    h.goals_avg_3, h.goals_sum_3, h.goals_conceded_avg_3, h.goals_conceded_sum_3,
-    h.shots_avg_3, h.shots_on_target_avg_3, h.shots_on_target_pct_3,
-    h.xg_avg_3, h.xg_sum_3, h.xg_conceded_avg_3,
-    h.passes_completed_avg_3, h.passes_pct_3, h.progressive_passes_avg_3,
-    h.possession_avg_3, h.tackles_avg_3, h.interceptions_avg_3,
-    h.fouls_avg_3, h.cards_yellow_avg_3, h.cards_red_avg_3,
-    h.corners_avg_3, h.crosses_avg_3, h.take_ons_won_pct_3,
-    h.aerials_won_pct_3, h.form_3,
-    h.goals_avg_7, h.goals_sum_7, h.goals_conceded_avg_7, h.goals_conceded_sum_7,
-    h.shots_avg_7, h.shots_on_target_avg_7, h.shots_on_target_pct_7,
-    h.xg_avg_7, h.xg_sum_7, h.xg_conceded_avg_7,
-    h.passes_completed_avg_7, h.passes_pct_7, h.progressive_passes_avg_7,
-    h.possession_avg_7, h.tackles_avg_7, h.interceptions_avg_7,
-    h.fouls_avg_7, h.cards_yellow_avg_7, h.cards_red_avg_7,
-    h.corners_avg_7, h.crosses_avg_7, h.take_ons_won_pct_7,
-    h.aerials_won_pct_7, h.form_7,
-    h.goals_avg_11, h.goals_sum_11, h.goals_conceded_avg_11, h.goals_conceded_sum_11,
-    h.shots_avg_11, h.shots_on_target_avg_11, h.shots_on_target_pct_11,
-    h.xg_avg_11, h.xg_sum_11, h.xg_conceded_avg_11,
-    h.passes_completed_avg_11, h.passes_pct_11, h.progressive_passes_avg_11,
-    h.possession_avg_11, h.tackles_avg_11, h.interceptions_avg_11,
-    h.fouls_avg_11, h.cards_yellow_avg_11, h.cards_red_avg_11,
-    h.corners_avg_11, h.crosses_avg_11, h.take_ons_won_pct_11,
-    h.aerials_won_pct_11, h.form_11,
-    
-    -- Признаки гостевой команды
-    a.goals_avg_3, a.goals_sum_3, a.goals_conceded_avg_3, a.goals_conceded_sum_3,
-    a.shots_avg_3, a.shots_on_target_avg_3, a.shots_on_target_pct_3,
-    a.xg_avg_3, a.xg_sum_3, a.xg_conceded_avg_3,
-    a.passes_completed_avg_3, a.passes_pct_3, a.progressive_passes_avg_3,
-    a.possession_avg_3, a.tackles_avg_3, a.interceptions_avg_3,
-    a.fouls_avg_3, a.cards_yellow_avg_3, a.cards_red_avg_3,
-    a.corners_avg_3, a.crosses_avg_3, a.take_ons_won_pct_3,
-    a.aerials_won_pct_3, a.form_3,
-    a.goals_avg_7, a.goals_sum_7, a.goals_conceded_avg_7, a.goals_conceded_sum_7,
-    a.shots_avg_7, a.shots_on_target_avg_7, a.shots_on_target_pct_7,
-    a.xg_avg_7, a.xg_sum_7, a.xg_conceded_avg_7,
-    a.passes_completed_avg_7, a.passes_pct_7, a.progressive_passes_avg_7,
-    a.possession_avg_7, a.tackles_avg_7, a.interceptions_avg_7,
-    a.fouls_avg_7, a.cards_yellow_avg_7, a.cards_red_avg_7,
-    a.corners_avg_7, a.crosses_avg_7, a.take_ons_won_pct_7,
-    a.aerials_won_pct_7, a.form_7,
-    a.goals_avg_11, a.goals_sum_11, a.goals_conceded_avg_11, a.goals_conceded_sum_11,
-    a.shots_avg_11, a.shots_on_target_avg_11, a.shots_on_target_pct_11,
-    a.xg_avg_11, a.xg_sum_11, a.xg_conceded_avg_11,
-    a.passes_completed_avg_11, a.passes_pct_11, a.progressive_passes_avg_11,
-    a.possession_avg_11, a.tackles_avg_11, a.interceptions_avg_11,
-    a.fouls_avg_11, a.cards_yellow_avg_11, a.cards_red_avg_11,
-    a.corners_avg_11, a.crosses_avg_11, a.take_ons_won_pct_11,
-    a.aerials_won_pct_11, a.form_11,
-    
-    -- Признаки взаимодействия
-    h.goals_avg_3 - a.goals_avg_3 as diff_goals_avg_3,
-    h.goals_conceded_avg_3 - a.goals_conceded_avg_3 as diff_goals_conceded_avg_3,
-    h.xg_avg_3 - a.xg_avg_3 as diff_xg_avg_3,
-    h.shots_avg_3 - a.shots_avg_3 as diff_shots_avg_3,
-    h.possession_avg_3 - a.possession_avg_3 as diff_possession_avg_3,
-    h.form_3 - a.form_3 as diff_form_3,
-    if(a.goals_avg_3 > 0, h.goals_avg_3 / a.goals_avg_3, 0) as ratio_goals_avg_3,
-    if(a.xg_avg_3 > 0, h.xg_avg_3 / a.xg_avg_3, 0) as ratio_xg_avg_3,
-    if(a.shots_avg_3 > 0, h.shots_avg_3 / a.shots_avg_3, 0) as ratio_shots_avg_3,
-    
-    h.goals_avg_7 - a.goals_avg_7 as diff_goals_avg_7,
-    h.goals_conceded_avg_7 - a.goals_conceded_avg_7 as diff_goals_conceded_avg_7,
-    h.xg_avg_7 - a.xg_avg_7 as diff_xg_avg_7,
-    h.shots_avg_7 - a.shots_avg_7 as diff_shots_avg_7,
-    h.possession_avg_7 - a.possession_avg_7 as diff_possession_avg_7,
-    h.form_7 - a.form_7 as diff_form_7,
-    if(a.goals_avg_7 > 0, h.goals_avg_7 / a.goals_avg_7, 0) as ratio_goals_avg_7,
-    if(a.xg_avg_7 > 0, h.xg_avg_7 / a.xg_avg_7, 0) as ratio_xg_avg_7,
-    if(a.shots_avg_7 > 0, h.shots_avg_7 / a.shots_avg_7, 0) as ratio_shots_avg_7,
-    
-    h.goals_avg_11 - a.goals_avg_11 as diff_goals_avg_11,
-    h.goals_conceded_avg_11 - a.goals_conceded_avg_11 as diff_goals_conceded_avg_11,
-    h.xg_avg_11 - a.xg_avg_11 as diff_xg_avg_11,
-    h.shots_avg_11 - a.shots_avg_11 as diff_shots_avg_11,
-    h.possession_avg_11 - a.possession_avg_11 as diff_possession_avg_11,
-    h.form_11 - a.form_11 as diff_form_11,
-    if(a.goals_avg_11 > 0, h.goals_avg_11 / a.goals_avg_11, 0) as ratio_goals_avg_11,
-    if(a.xg_avg_11 > 0, h.xg_avg_11 / a.xg_avg_11, 0) as ratio_xg_avg_11,
-    if(a.shots_avg_11 > 0, h.shots_avg_11 / a.shots_avg_11, 0) as ratio_shots_avg_11,
-    
-    -- Производные признаки
-    if(h.shots_avg_3 > 0, h.goals_avg_3 / h.shots_avg_3, 0) as home_team_attack_efficiency_3,
-    if(h.shots_avg_7 > 0, h.goals_avg_7 / h.shots_avg_7, 0) as home_team_attack_efficiency_7,
-    if(h.shots_avg_11 > 0, h.goals_avg_11 / h.shots_avg_11, 0) as home_team_attack_efficiency_11,
-    if(h.shots_on_target_avg_3 > 0, h.goals_conceded_avg_3 / h.shots_on_target_avg_3, 0) as home_team_defense_efficiency_3,
-    if(h.shots_on_target_avg_7 > 0, h.goals_conceded_avg_7 / h.shots_on_target_avg_7, 0) as home_team_defense_efficiency_7,
-    if(h.shots_on_target_avg_11 > 0, h.goals_conceded_avg_11 / h.shots_on_target_avg_11, 0) as home_team_defense_efficiency_11,
-    if(a.shots_avg_3 > 0, a.goals_avg_3 / a.shots_avg_3, 0) as away_team_attack_efficiency_3,
-    if(a.shots_avg_7 > 0, a.goals_avg_7 / a.shots_avg_7, 0) as away_team_attack_efficiency_7,
-    if(a.shots_avg_11 > 0, a.goals_avg_11 / a.shots_avg_11, 0) as away_team_attack_efficiency_11,
-    if(a.shots_on_target_avg_3 > 0, a.goals_conceded_avg_3 / a.shots_on_target_avg_3, 0) as away_team_defense_efficiency_3,
-    if(a.shots_on_target_avg_7 > 0, a.goals_conceded_avg_7 / a.shots_on_target_avg_7, 0) as away_team_defense_efficiency_7,
-    if(a.shots_on_target_avg_11 > 0, a.goals_conceded_avg_11 / a.shots_on_target_avg_11, 0) as away_team_defense_efficiency_11,
-    
-    -- Стабильность
-    h.goals_std_3, h.goals_std_7, h.goals_std_11,
-    a.goals_std_3, a.goals_std_7, a.goals_std_11
-    
-FROM targets t
-INNER JOIN home_features h ON t.match_id = h.match_id AND t.home_team_id = h.team_id
-INNER JOIN away_features a ON t.match_id = a.match_id AND t.away_team_id = a.team_id
+SELECT * 
+FROM final_dataset
 WHERE 
-    -- Исключаем записи с недостаточными данными
-    h.goals_avg_11 IS NOT NULL 
-    AND a.goals_avg_11 IS NOT NULL
-ORDER BY t.match_date, t.match_id;
+    home_goals_avg_7 IS NOT NULL  -- Только матчи с достаточной историей
+    AND away_goals_avg_7 IS NOT NULL
+ORDER BY match_date, match_id;

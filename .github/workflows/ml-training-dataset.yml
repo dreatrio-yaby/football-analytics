@@ -1,24 +1,22 @@
-name: ML Training Dataset Generation
+name: ML Training Dataset - Simple
 
 on:
   # Запуск по расписанию (каждый день в 3:00 UTC, после sync raw данных)
   schedule:
     - cron: '0 3 * * *'
   
-  # Ручной запуск с выбором операции
+  # Ручной запуск
   workflow_dispatch:
     inputs:
       operation:
         description: 'Operation to perform'
         required: true
-        default: 'build_dataset'
+        default: 'build'
         type: choice
         options:
-          - build_dataset          # Полная генерация обучающей выборки
-          - create_ml_tables       # Только создание ML схемы и таблиц
-          - verify_dataset         # Только верификация существующих данных
-          - get_stats              # Только получение статистики
-          - cleanup                # Очистка ML данных
+          - build           # Создать обучающую выборку
+          - verify          # Проверить существующие данные
+          - cleanup         # Очистить данные
   
   # Запуск после успешного завершения raw data sync
   workflow_run:
@@ -29,12 +27,7 @@ on:
 jobs:
   ml-training-dataset:
     runs-on: ubuntu-latest
-    # Запускаем только если предыдущий workflow завершился успешно (для workflow_run)
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
-    
-    env:
-      ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
-      ACCESS_KEY_SECRET: ${{ secrets.ACCESS_KEY_SECRET }}
     
     steps:
       - name: Checkout repository
@@ -51,7 +44,7 @@ jobs:
           sudo chmod 644 /usr/local/share/ca-certificates/Yandex/RootCA.crt
           sudo chmod 644 /usr/local/share/ca-certificates/Yandex/IntermediateCA.crt
           sudo update-ca-certificates
-          echo "✅ SSL certificates installed successfully"
+          echo "✅ SSL certificates installed"
       
       - name: Test ClickHouse connection
         run: |
@@ -65,184 +58,34 @@ jobs:
           }
           echo "✅ ClickHouse connection successful"
       
-      - name: Verify raw data availability
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == '' || github.event.inputs.operation == 'verify_dataset'
+      - name: Verify raw data
+        if: github.event.inputs.operation == 'build' || github.event.inputs.operation == '' || github.event.inputs.operation == 'verify'
         run: |
           echo "🔍 Checking raw data availability..."
           
-          # Проверяем наличие raw.match_stats таблицы
           response=$(curl -s -w "%{http_code}" \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "SELECT COUNT(*) FROM raw.match_stats" \
-            --output raw_count.txt)
+            --data "SELECT COUNT(*) as total, COUNT(DISTINCT match_id) as matches FROM raw.match_stats" \
+            --output raw_stats.txt)
+          
+          echo "📊 Raw data stats:"
+          cat raw_stats.txt
           
           if [ "$response" -ne 200 ]; then
-            echo "❌ Raw data table not accessible"
+            echo "❌ Cannot access raw data"
             exit 1
           fi
           
-          raw_count=$(cat raw_count.txt)
-          echo "📊 Raw data records: $raw_count"
-          
-          if [ "$raw_count" -lt 100 ]; then
-            echo "⚠️  Warning: Low number of raw records ($raw_count)"
-            echo "Continuing anyway for testing purposes..."
-          fi
-          
-          # Проверяем наличие достаточного количества матчей для создания признаков
-          response=$(curl -s -w "%{http_code}" \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "SELECT COUNT(DISTINCT match_id) FROM raw.match_stats" \
-            --output match_count.txt)
-          
-          match_count=$(cat match_count.txt)
-          echo "📊 Unique matches: $match_count"
-          
-          if [ "$match_count" -lt 20 ]; then
-            echo "⚠️  Warning: Low number of matches ($match_count)"
-            echo "This may affect feature generation quality"
-          fi
-          
-          rm -f raw_count.txt match_count.txt
           echo "✅ Raw data verification completed"
-      
-      - name: Create ML database and schema
-        if: github.event.inputs.operation == 'create_ml_tables' || github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
-        run: |
-          echo "🏗️  Creating ML database..."
-          
-          curl -s --fail \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "CREATE DATABASE IF NOT EXISTS ml" || {
-            echo "❌ Failed to create ml database"
-            exit 1
-          }
-          echo "✅ ML database created successfully"
-      
-      - name: Create training dataset table
-        if: github.event.inputs.operation == 'create_ml_tables' || github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
-        run: |
-          echo "🏗️  Creating training dataset table..."
-          
-          response=$(curl -s -w "%{http_code}" \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data-binary @data/ml/sql/create_training_dataset.sql \
-            --output create_table_result.txt)
-          
-          echo "HTTP Status: $response"
-          echo "Response:"
-          cat create_table_result.txt
-          
-          if [ "$response" -eq 200 ]; then
-            echo "✅ Training dataset table created successfully"
-          else
-            echo "❌ Failed to create training dataset table"
-            rm -f create_table_result.txt
-            exit 1
-          fi
-          
-          rm -f create_table_result.txt
-      
-      - name: Test team features syntax
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
-        run: |
-          echo "🔍 Testing team features SQL syntax..."
-          
-          # Сначала тестируем синтаксис на небольшом подзапросе
-          response=$(curl -s -w "%{http_code}" \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data-binary @data/ml/sql/test_generate_features.sql \
-            --output test_features_result.txt)
-          
-          echo "Test HTTP Status: $response"
-          echo "Test Response:"
-          head -10 test_features_result.txt
-          
-          if [ "$response" -eq 200 ]; then
-            echo "✅ Team features syntax test passed"
-          else
-            echo "❌ Team features syntax test failed"
-            cat test_features_result.txt
-            rm -f test_features_result.txt
-            exit 1
-          fi
-          
-          rm -f test_features_result.txt
-      
-      - name: Generate team features
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
-        run: |
-          echo "⚙️  Generating team features..."
-          echo "This step creates aggregated statistics for teams across different time windows..."
-          
-          # Создаем временную view для team features (поскольку это сложный запрос)
-          response=$(curl -s -w "%{http_code}" \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "CREATE OR REPLACE VIEW ml.temp_team_features AS $(cat data/ml/sql/generate_team_features.sql)" \
-            --output features_result.txt)
-          
-          echo "HTTP Status: $response"
-          echo "Response:"
-          head -10 features_result.txt
-          
-          if [ "$response" -eq 200 ]; then
-            echo "✅ Team features view created successfully"
-          else
-            echo "❌ Failed to create team features view"
-            cat features_result.txt
-            rm -f features_result.txt
-            exit 1
-          fi
-          
-          rm -f features_result.txt
-      
-      - name: Generate targets
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
-        run: |
-          echo "🎯 Generating targets..."
-          echo "Creating targets for match results, goals, corners, cards, and fouls..."
-          
-          # Создаем временную view для targets
-          response=$(curl -s -w "%{http_code}" \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "CREATE OR REPLACE VIEW ml.temp_targets AS $(cat data/ml/sql/generate_targets.sql)" \
-            --output targets_result.txt)
-          
-          echo "HTTP Status: $response"
-          echo "Response:"
-          head -10 targets_result.txt
-          
-          if [ "$response" -eq 200 ]; then
-            echo "✅ Targets view created successfully"
-          else
-            echo "❌ Failed to create targets view"
-            cat targets_result.txt
-            rm -f targets_result.txt
-            exit 1
-          fi
-          
-          rm -f targets_result.txt
+          rm -f raw_stats.txt
       
       - name: Build training dataset
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == ''
+        if: github.event.inputs.operation == 'build' || github.event.inputs.operation == ''
         run: |
-          echo "🚀 Building final training dataset..."
-          echo "This may take several minutes for large datasets..."
+          echo "🚀 Building training dataset with ClickHouse window functions..."
+          echo "This creates ml.training_dataset table with features and targets"
           
-          # Очищаем существующие данные
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "TRUNCATE TABLE ml.training_dataset"
-          
-          # Выполняем основной ETL процесс
           response=$(curl -s -w "%{http_code}" \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
@@ -257,7 +100,7 @@ jobs:
             echo "✅ Training dataset built successfully"
           else
             echo "❌ Failed to build training dataset"
-            echo "Full error output:"
+            echo "Full error:"
             cat build_result.txt
             rm -f build_result.txt
             exit 1
@@ -265,13 +108,13 @@ jobs:
           
           rm -f build_result.txt
       
-      - name: Verify training dataset quality
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == '' || github.event.inputs.operation == 'verify_dataset'
+      - name: Verify dataset quality
+        if: github.event.inputs.operation == 'build' || github.event.inputs.operation == '' || github.event.inputs.operation == 'verify'
         run: |
           echo "🔍 Verifying training dataset quality..."
           
           # Базовая статистика
-          echo "📊 Basic statistics:"
+          echo "📊 Basic Statistics:"
           curl -s \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
@@ -282,140 +125,75 @@ jobs:
               COUNT(DISTINCT away_team_id) as away_teams,
               MIN(match_date) as earliest_date,
               MAX(match_date) as latest_date
-            FROM ml.training_dataset" \
-            --output basic_stats.txt
-          cat basic_stats.txt
+            FROM ml.training_dataset FORMAT Vertical"
           
-          # Проверка пропусков в ключевых полях
-          echo "🔍 Checking for missing values in key features:"
+          echo ""
+          echo "🎯 Target Distribution:"
           curl -s \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
             --data "SELECT 
-              countIf(home_team_goals_avg_7 IS NULL) as null_home_goals_7,
-              countIf(away_team_goals_avg_7 IS NULL) as null_away_goals_7,
-              countIf(target_match_result IS NULL) as null_target_result,
-              countIf(target_total_goals_over_2_5 IS NULL) as null_target_total
-            FROM ml.training_dataset" \
-            --output null_check.txt
-          cat null_check.txt
-          
-          # Проверка диапазонов таргетов
-          echo "🎯 Target distribution:"
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "SELECT 
-              'match_result' as target_type,
+              'match_result' as target,
               target_match_result as value,
-              COUNT(*) as count
+              COUNT(*) as count,
+              ROUND(COUNT(*) * 100.0 / (SELECT COUNT(*) FROM ml.training_dataset), 1) as percentage
             FROM ml.training_dataset 
-            GROUP BY target_match_result
-            ORDER BY target_match_result" \
-            --output target_distribution.txt
-          cat target_distribution.txt
+            GROUP BY target_match_result 
+            ORDER BY target_match_result FORMAT PrettyCompact"
           
-          rm -f basic_stats.txt null_check.txt target_distribution.txt
+          echo ""
+          echo "⚽ Goals Totals:"
+          curl -s \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data "SELECT 
+              ROUND(AVG(target_total_goals_over_1_5) * 100, 1) as pct_over_1_5,
+              ROUND(AVG(target_total_goals_over_2_5) * 100, 1) as pct_over_2_5,
+              ROUND(AVG(target_total_goals_over_3_5) * 100, 1) as pct_over_3_5
+            FROM ml.training_dataset FORMAT Vertical"
+          
+          echo ""
+          echo "📈 Feature Quality Check:"
+          curl -s \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data "SELECT 
+              countIf(home_goals_avg_7 IS NULL) as null_home_goals,
+              countIf(away_goals_avg_7 IS NULL) as null_away_goals,
+              countIf(home_goals_avg_7 < 0) as negative_home_goals,
+              countIf(away_goals_avg_7 < 0) as negative_away_goals,
+              ROUND(AVG(home_goals_avg_7), 2) as avg_home_goals_7,
+              ROUND(AVG(away_goals_avg_7), 2) as avg_away_goals_7
+            FROM ml.training_dataset FORMAT Vertical"
+          
           echo "✅ Dataset quality verification completed"
       
-      - name: Get comprehensive statistics
-        if: github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == '' || github.event.inputs.operation == 'get_stats'
-        run: |
-          echo "📈 Getting comprehensive training dataset statistics..."
-          
-          # Общая статистика
-          echo "📊 General Statistics:"
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "SELECT 
-              COUNT(*) as total_records,
-              COUNT(DISTINCT match_id) as unique_matches,
-              COUNT(DISTINCT home_team_id) as unique_home_teams,
-              COUNT(DISTINCT away_team_id) as unique_away_teams,
-              COUNT(DISTINCT CONCAT(home_team_id, away_team_id)) as unique_team_pairs,
-              MIN(match_date) as earliest_match,
-              MAX(match_date) as latest_match,
-              dateDiff('day', MIN(match_date), MAX(match_date)) as date_range_days
-            FROM ml.training_dataset FORMAT Vertical" \
-            --output general_stats.txt
-          cat general_stats.txt
-          
-          # Статистика по таргетам
-          echo "🎯 Target Statistics (Over 2.5 goals):"
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "SELECT 
-              AVG(target_total_goals_over_2_5) * 100 as pct_over_2_5_goals,
-              AVG(target_match_result = 2) * 100 as pct_home_wins,
-              AVG(target_match_result = 1) * 100 as pct_draws,
-              AVG(target_match_result = 0) * 100 as pct_away_wins,
-              AVG(target_corners_over_10_5) * 100 as pct_over_10_5_corners
-            FROM ml.training_dataset FORMAT Vertical" \
-            --output target_stats.txt
-          cat target_stats.txt
-          
-          # Статистика по признакам
-          echo "⚽ Feature Statistics (7-match windows):"
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "SELECT 
-              AVG(home_team_goals_avg_7) as avg_home_goals_7,
-              AVG(away_team_goals_avg_7) as avg_away_goals_7,
-              AVG(home_team_xg_avg_7) as avg_home_xg_7,
-              AVG(away_team_xg_avg_7) as avg_away_xg_7,
-              AVG(diff_goals_avg_7) as avg_goal_difference_7,
-              AVG(home_team_form_7) as avg_home_form_7,
-              AVG(away_team_form_7) as avg_away_form_7
-            FROM ml.training_dataset FORMAT Vertical" \
-            --output feature_stats.txt
-          cat feature_stats.txt
-          
-          rm -f general_stats.txt target_stats.txt feature_stats.txt
-          echo "✅ Comprehensive statistics completed"
-      
-      - name: Cleanup temporary views
-        if: always() && (github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == '' || github.event.inputs.operation == 'cleanup')
-        run: |
-          echo "🧹 Cleaning up temporary views..."
-          
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "DROP VIEW IF EXISTS ml.temp_team_features"
-          
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "DROP VIEW IF EXISTS ml.temp_targets"
-          
-          echo "✅ Cleanup completed"
-      
-      - name: Cleanup ML data (manual operation)
+      - name: Cleanup ML data
         if: github.event.inputs.operation == 'cleanup'
         run: |
-          echo "🗑️  Performing ML data cleanup..."
-          
-          curl -s \
-            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
-            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data "TRUNCATE TABLE IF EXISTS ml.training_dataset"
+          echo "🗑️  Cleaning up ML training dataset..."
           
           curl -s \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
             --data "DROP TABLE IF EXISTS ml.training_dataset"
           
-          echo "⚠️  ML training dataset has been completely removed"
+          echo "✅ ML training dataset cleaned up"
       
-      - name: Final success notification
-        if: success() && (github.event.inputs.operation == 'build_dataset' || github.event.inputs.operation == '')
+      - name: Success summary
+        if: success() && (github.event.inputs.operation == 'build' || github.event.inputs.operation == '')
         run: |
           echo "🎉 ML Training Dataset Generation completed successfully!"
-          echo "📊 Dataset is ready for machine learning workflows"
-          echo "🔗 Next steps:"
-          echo "   - Export data for model training"
-          echo "   - Validate feature engineering results"
-          echo "   - Begin model development and experimentation"
+          echo ""
+          echo "📊 Quick Stats:"
+          curl -s \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data "SELECT 
+              COUNT(*) as records,
+              COUNT(DISTINCT match_id) as matches,
+              ROUND(AVG(target_total_goals_over_2_5) * 100, 1) as pct_over_2_5_goals
+            FROM ml.training_dataset"
+          echo ""
+          echo "🔗 Dataset ready at: ml.training_dataset"
+          echo "📝 Use SQL queries to explore and export data for ML models"
