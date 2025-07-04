@@ -56,10 +56,23 @@ jobs:
           }
           echo "✅ ClickHouse connection successful"
       
-      - name: Create database and table
+      - name: Create database
         if: github.event.inputs.operation == 'create_table' || github.event.inputs.operation == 'sync'
         run: |
-          echo "Creating database and table..."
+          echo "Creating database..."
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @data/raw/sql/create_database.sql || {
+            echo "❌ Failed to create database"
+            exit 1
+          }
+          echo "✅ Database created successfully"
+      
+      - name: Create table
+        if: github.event.inputs.operation == 'create_table' || github.event.inputs.operation == 'sync'
+        run: |
+          echo "Creating table..."
           curl -s --fail \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \

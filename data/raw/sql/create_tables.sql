@@ -1,8 +1,6 @@
 -- Создание таблицы для плоской структуры статистики матчей
 -- Используется обычная таблица + INSERT с чтением из S3
 
-CREATE DATABASE IF NOT EXISTS raw;
-
 CREATE TABLE IF NOT EXISTS raw.match_stats (
     -- Основные поля матча
     match_id String,
