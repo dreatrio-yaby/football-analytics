@@ -1,0 +1,117 @@
+name: ClickHouse Data Sync
+
+on:
+  # Запуск по расписанию (каждый день в 2:00 UTC)
+  schedule:
+    - cron: '0 2 * * *'
+  
+  # Ручной запуск
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Operation to perform'
+        required: true
+        default: 'sync'
+        type: choice
+        options:
+          - sync
+          - create_table
+          - test_connection
+          - verify_data
+
+jobs:
+  clickhouse-sync:
+    runs-on: ubuntu-latest
+    
+    env:
+      ACCESS_KEY_ID: ${{ secrets.ACCESS_KEY_ID }}
+      ACCESS_KEY_SECRET: ${{ secrets.ACCESS_KEY_SECRET }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Test ClickHouse connection
+        run: |
+          echo "Testing ClickHouse connection..."
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data "SELECT 1" || {
+            echo "❌ ClickHouse connection failed"
+            exit 1
+          }
+          echo "✅ ClickHouse connection successful"
+      
+      - name: Create database and table
+        if: github.event.inputs.operation == 'create_table' || github.event.inputs.operation == 'sync'
+        run: |
+          echo "Creating database and table..."
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @data/raw/sql/create_tables.sql || {
+            echo "❌ Failed to create table"
+            exit 1
+          }
+          echo "✅ Table created successfully"
+      
+      - name: Sync data from S3
+        if: github.event.inputs.operation == 'sync' || github.event.inputs.operation == ''
+        run: |
+          echo "Syncing data from S3..."
+          # Подстановка переменных в SQL файл
+          sed "s/{ACCESS_KEY_ID}/${{ secrets.ACCESS_KEY_ID }}/g; s/{ACCESS_KEY_SECRET}/${{ secrets.ACCESS_KEY_SECRET }}/g" data/raw/sql/insert_data.sql > temp_insert.sql
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @temp_insert.sql || {
+            echo "❌ Failed to sync data"
+            exit 1
+          }
+          rm -f temp_insert.sql
+          echo "✅ Data synced successfully"
+      
+      - name: Test data extraction
+        if: github.event.inputs.operation == 'test_connection' || github.event.inputs.operation == 'verify_data'
+        run: |
+          echo "Testing data extraction..."
+          # Подстановка переменных в SQL файл
+          sed "s/{ACCESS_KEY_ID}/${{ secrets.ACCESS_KEY_ID }}/g; s/{ACCESS_KEY_SECRET}/${{ secrets.ACCESS_KEY_SECRET }}/g" data/raw/sql/test_queries.sql > temp_test.sql
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @temp_test.sql || {
+            echo "❌ Failed to test data extraction"
+            exit 1
+          }
+          rm -f temp_test.sql
+          echo "✅ Data extraction test successful"
+      
+      - name: Verify all fields
+        if: github.event.inputs.operation == 'verify_data'
+        run: |
+          echo "Verifying all fields extraction..."
+          # Подстановка переменных в SQL файл
+          sed "s/{ACCESS_KEY_ID}/${{ secrets.ACCESS_KEY_ID }}/g; s/{ACCESS_KEY_SECRET}/${{ secrets.ACCESS_KEY_SECRET }}/g" data/raw/sql/verify_fields.sql > temp_verify.sql
+          curl -s --fail \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @temp_verify.sql || {
+            echo "❌ Failed to verify fields"
+            exit 1
+          }
+          rm -f temp_verify.sql
+          echo "✅ All fields verified successfully"
+      
+      - name: Get data statistics
+        if: github.event.inputs.operation == 'sync' || github.event.inputs.operation == ''
+        run: |
+          echo "Getting data statistics..."
+          curl -s \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data "SELECT COUNT(*) as total_records, COUNT(DISTINCT match_id) as unique_matches, COUNT(DISTINCT team_id) as unique_teams FROM raw.match_stats" \
+            --output stats.txt
+          echo "📊 Data Statistics:"
+          cat stats.txt

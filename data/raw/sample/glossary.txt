@@ -1,0 +1,102 @@
+Also view explanations by holding mouse over column headers
+# -- Shirt Number
+Shirt Number
+Nation -- Nationality of the player.
+First, we check our records in international play at senior level.
+Then youth level.
+Then citizenship presented on wikipedia.
+Finally, we use their birthplace when available.
+Pos -- Position
+Position most commonly played by the player
+GK - Goalkeepers
+DF - Defenders
+MF - Midfielders
+FW - Forwards
+FB - Fullbacks
+LB - Left Backs
+RB - Right Backs
+CB - Center Backs
+DM - Defensive Midfielders
+CM - Central Midfielders
+LM - Left Midfielders
+RM - Right Midfielders
+WM - Wide Midfielders
+LW - Left Wingers
+RW - Right Wingers
+AM - Attacking Midfielders
+Age -- Age on date of match
+Age at season start
+Given on August 1 for winter leagues
+and February 1 for summer leagues.
+Min -- Minutes
+Performance
+Gls -- Goals
+Goals scored or allowed
+Ast -- Assists
+Assists
+PK -- Penalty Kicks Made
+Penalty Kicks Made
+PKatt -- Penalty Kicks Attempted
+Penalty Kicks Attempted
+Sh -- Shots Total
+Shots Total
+Does not include penalty kicks
+SoT -- Shots on Target
+Shots on Target
+Note: Shots on target do not include penalty kicks
+CrdY -- Yellow Cards
+Yellow Cards
+CrdR -- Red Cards
+Red Cards
+Touches -- Number of times a player touched the ball. Note: Receiving a pass, then dribbling, then sending a pass counts as one touch
+Tkl -- Tackles
+Number of players tackled
+Int -- Interceptions
+Interceptions
+Blocks -- Number of times blocking the ball by standing in its path
+Expected
+xG -- xG: Expected Goals
+Expected Goals
+xG totals include penalty kicks, but do not include penalty shootouts (unless otherwise noted).
+Provided by Opta.
+An underline indicates there is a match that is missing data, but will be updated when available.
+npxG -- npxG: Non-Penalty xG
+Non-Penalty Expected Goals
+Provided by Opta.
+An underline indicates there is a match that is missing data, but will be updated when available.
+xAG -- xAG: Exp. Assisted Goals
+Expected Assisted Goals
+xG which follows a pass that assists a shot
+Provided by Opta.
+An underline indicates there is a match that is missing data, but will be updated when available.
+SCA
+SCA -- Shot-Creating Actions
+Shot-Creating Actions
+The two offensive actions directly leading to a shot, such as passes, take-ons and drawing fouls. Note: A single player can receive credit for multiple actions and the shot-taker can also receive credit.
+GCA -- Goal-Creating Actions
+Goal-Creating Actions
+The two offensive actions directly leading to a goal, such as passes, take-ons and drawing fouls. Note: A single player can receive credit for multiple actions and the shot-taker can also receive credit.
+Passes
+Cmp -- Passes Completed
+Passes Completed
+Includes live ball passes (including crosses) as well as corner kicks, throw-ins, free kicks and goal kicks.
+Att -- Passes Attempted
+Passes Attempted
+Includes live ball passes (including crosses) as well as corner kicks, throw-ins, free kicks and goal kicks.
+Cmp% -- Pass Completion %
+Pass Completion Percentage
+Minimum 30 minutes played per squad game to qualify as a leader
+Includes live ball passes (including crosses) as well as corner kicks, throw-ins, free kicks and goal kicks.
+PrgP -- Progressive Passes
+Progressive Passes
+Completed passes that move the ball towards the opponent's goal line at least 10 yards from its furthest point in the last six passes, or any completed pass into the penalty area. Excludes passes from the defending 40% of the pitch
+Carries
+Carries -- Number of times the player controlled the ball with their feet
+PrgC -- Progressive Carries
+Carries that move the ball towards the opponent's goal line at least 10 yards from its furthest point in the last six passes, or any carry into the penalty area. Excludes carries which end in the defending 50% of the pitch
+Take-Ons
+Att -- Take-Ons Attempted
+Number of attempts to take on defenders while dribbling
+Succ -- Successful Take-Ons
+Number of defenders taken on successfully, by dribbling past them
+Unsuccessful take-ons include attempts where the dribbler retained possession but was unable to get past the defender
