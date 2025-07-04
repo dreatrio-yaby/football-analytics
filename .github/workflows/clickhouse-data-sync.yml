@@ -82,21 +82,67 @@ jobs:
           }
           echo "✅ Table created successfully"
       
+      - name: Test S3 connection
+        if: github.event.inputs.operation == 'sync' || github.event.inputs.operation == ''
+        run: |
+          echo "Testing S3 connection..."
+          # Подстановка переменных в простой тестовый SQL файл
+          sed "s/{ACCESS_KEY_ID}/${{ secrets.ACCESS_KEY_ID }}/g; s/{ACCESS_KEY_SECRET}/${{ secrets.ACCESS_KEY_SECRET }}/g" data/raw/sql/test_s3_simple.sql > temp_s3_test.sql
+          
+          echo "📋 Generated S3 test query:"
+          cat temp_s3_test.sql
+          
+          echo "🔍 Testing S3 access..."
+          response=$(curl -s -w "%{http_code}" \
+            "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
+            --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
+            --data-binary @temp_s3_test.sql \
+            --output s3_test_result.txt)
+          
+          echo "HTTP Status: $response"
+          echo "Response:"
+          cat s3_test_result.txt
+          
+          if [ "$response" -eq 200 ]; then
+            echo "✅ S3 connection test successful"
+          else
+            echo "❌ S3 connection test failed"
+            rm -f temp_s3_test.sql s3_test_result.txt
+            exit 1
+          fi
+          
+          rm -f temp_s3_test.sql s3_test_result.txt
+      
       - name: Sync data from S3
         if: github.event.inputs.operation == 'sync' || github.event.inputs.operation == ''
         run: |
           echo "Syncing data from S3..."
           # Подстановка переменных в SQL файл
           sed "s/{ACCESS_KEY_ID}/${{ secrets.ACCESS_KEY_ID }}/g; s/{ACCESS_KEY_SECRET}/${{ secrets.ACCESS_KEY_SECRET }}/g" data/raw/sql/insert_data.sql > temp_insert.sql
-          curl -s --fail \
+          
+          echo "📋 Generated INSERT query (first 20 lines):"
+          head -20 temp_insert.sql
+          
+          echo "🔍 Executing INSERT query..."
+          response=$(curl -s -w "%{http_code}" \
             "https://${{ secrets.CLICKHOUSE_HOST }}:8443/" \
             --user "${{ secrets.CLICKHOUSE_USER }}:${{ secrets.CLICKHOUSE_PASSWORD }}" \
-            --data-binary @temp_insert.sql || {
+            --data-binary @temp_insert.sql \
+            --output insert_result.txt)
+          
+          echo "HTTP Status: $response"
+          echo "Response:"
+          cat insert_result.txt
+          
+          if [ "$response" -eq 200 ]; then
+            echo "✅ Data synced successfully"
+          else
             echo "❌ Failed to sync data"
+            rm -f temp_insert.sql insert_result.txt
             exit 1
-          }
-          rm -f temp_insert.sql
-          echo "✅ Data synced successfully"
+          fi
+          
+          rm -f temp_insert.sql insert_result.txt
       
       - name: Test data extraction
         if: github.event.inputs.operation == 'test_connection' || github.event.inputs.operation == 'verify_data'
