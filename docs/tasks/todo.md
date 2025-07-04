@@ -218,8 +218,6 @@
 [x] Добавить поле is_home в схему таблицы
 [x] Обновить документацию с решением
 
-### Проблема
-GitHub Actions падал с ошибкой `Unknown data type family: teams_stats` из-за некорректного использования `JSONExtractKeysAndValues()`.
 
 ### Изменения
 
